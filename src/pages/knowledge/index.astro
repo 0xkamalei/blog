@@ -1,0 +1,202 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { getKnowledgeEntries } from '../../lib/knowledge';
+
+const entries = getKnowledgeEntries();
+const count = entries.length;
+---
+
+<Layout
+	title="知识"
+	description="Lei 的知识库 - 架构图、系统拆解与可复用的心智模型"
+>
+	<div class="hero">
+		<h1 class="hero-title">知识</h1>
+		<p class="hero-desc">架构图、系统拆解，以及可以反复查证的心智模型。</p>
+		{count > 0 && <p class="hero-count">{count} 篇</p>}
+	</div>
+
+	{count === 0 ? (
+		<p class="empty">这里还是空的。</p>
+	) : (
+		<ul class="kb-list">
+			{entries.map((entry) => (
+				<li class="kb-item">
+					<a href={`/knowledge/${entry.slug}/`} class="kb-card">
+						<div class="kb-card-body">
+							<h2 class="kb-title">{entry.title}</h2>
+							<p class="kb-desc">{entry.description || entry.excerpt}</p>
+							<div class="kb-meta">
+								{entry.date && (
+									<time datetime={entry.date.toISOString()} class="kb-date">
+										{entry.date.toLocaleDateString('zh-CN', {
+											year: 'numeric',
+											month: 'long',
+											day: 'numeric',
+										})}
+									</time>
+								)}
+								{entry.tags.length > 0 && (
+									<div class="kb-tags">
+										{entry.tags.map((tag) => <span class="kb-tag">#{tag}</span>)}
+									</div>
+								)}
+							</div>
+						</div>
+						<span class="kb-arrow">→</span>
+					</a>
+				</li>
+			))}
+		</ul>
+	)}
+</Layout>
+
+<style>
+	.hero {
+		text-align: center;
+		padding: 2rem 0 3rem;
+		margin-bottom: 1rem;
+	}
+
+	.hero-title {
+		margin: 0 0 0.75rem 0;
+		font-size: 2.5rem;
+		font-weight: 700;
+		letter-spacing: -0.03em;
+		background: var(--accent-gradient);
+		-webkit-background-clip: text;
+		-webkit-text-fill-color: transparent;
+		background-clip: text;
+	}
+
+	.hero-desc {
+		margin: 0;
+		color: var(--text-secondary);
+		font-size: 1.0625rem;
+	}
+
+	.hero-count {
+		margin: 0.75rem 0 0 0;
+		font-size: 0.8125rem;
+		color: var(--text-tertiary);
+		letter-spacing: 0.04em;
+	}
+
+	.kb-list {
+		list-style: none;
+		padding: 0;
+		margin: 0;
+		display: flex;
+		flex-direction: column;
+		gap: 0.75rem;
+	}
+
+	.kb-card {
+		display: flex;
+		align-items: center;
+		justify-content: space-between;
+		gap: 1.25rem;
+		padding: 1.375rem 1.5rem;
+		background-color: var(--surface-color);
+		border: 1px solid var(--border-color);
+		border-radius: 14px;
+		text-decoration: none;
+		transition: all 0.2s ease;
+	}
+
+	.kb-card:hover {
+		border-color: var(--primary-color);
+		box-shadow: var(--shadow);
+		transform: translateY(-1px);
+	}
+
+	.kb-card:hover .kb-arrow {
+		transform: translateX(4px);
+		color: var(--primary-color);
+	}
+
+	.kb-card-body {
+		flex: 1;
+		min-width: 0;
+	}
+
+	.kb-title {
+		margin: 0 0 0.5rem 0;
+		font-size: 1.0625rem;
+		font-weight: 600;
+		color: var(--text-color);
+		line-height: 1.45;
+		font-family: 'Noto Serif SC', 'Inter', serif;
+	}
+
+	.kb-desc {
+		margin: 0 0 0.75rem 0;
+		font-size: 0.875rem;
+		color: var(--text-secondary);
+		line-height: 1.6;
+		display: -webkit-box;
+		-webkit-line-clamp: 2;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+	}
+
+	.kb-meta {
+		display: flex;
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+		font-size: 0.8125rem;
+	}
+
+	.kb-date {
+		color: var(--text-tertiary);
+	}
+
+	.kb-tags {
+		display: flex;
+		flex-wrap: wrap;
+		gap: 0.5rem;
+	}
+
+	.kb-tag {
+		color: var(--accent-color);
+		background-color: rgba(139, 92, 246, 0.1);
+		padding: 0.125rem 0.5rem;
+		border-radius: 4px;
+		font-size: 0.75rem;
+		font-weight: 500;
+	}
+
+	.kb-arrow {
+		color: var(--text-tertiary);
+		font-size: 1.25rem;
+		transition: all 0.2s ease;
+		flex-shrink: 0;
+	}
+
+	.empty {
+		text-align: center;
+		color: var(--text-tertiary);
+		font-size: 0.9375rem;
+		padding: 3rem 0;
+	}
+
+	@media (max-width: 640px) {
+		.hero {
+			padding: 1.5rem 0 2rem;
+		}
+
+		.hero-title {
+			font-size: 2rem;
+		}
+
+		.kb-card {
+			padding: 1.125rem 1rem;
+			border-radius: 12px;
+		}
+
+		.kb-arrow {
+			display: none;
+		}
+	}
+</style>

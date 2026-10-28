@@ -1,0 +1,957 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Transactional Outbox 端到端全链路架构图（含节点内部执行顺序编号）</title>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'JetBrains Mono', 'Noto Sans SC', monospace;
+      background: #020617;
+      min-height: 100vh;
+      padding: 2rem;
+      color: #f8fafc;
+    }
+    
+    .container {
+      max-width: 1440px;
+      margin: 0 auto;
+    }
+    
+    .header {
+      margin-bottom: 1.5rem;
+    }
+    
+    .header-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 0.5rem;
+    }
+    
+    .pulse-dot {
+      width: 12px;
+      height: 12px;
+      background: #38bdf8;
+      border-radius: 50%;
+      box-shadow: 0 0 12px #38bdf8;
+      animation: pulse 2s infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.9); }
+    }
+    
+    h1 {
+      font-size: 1.4rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: #f1f5f9;
+    }
+    
+    .subtitle {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      margin-left: 1.5rem;
+    }
+    
+    .diagram-container {
+      background: rgba(15, 23, 42, 0.75);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.25rem;
+      overflow-x: auto;
+      box-shadow: 0 20px 40px -15px rgba(0, 0, 0, 0.6);
+    }
+    
+    svg {
+      width: 100%;
+      min-width: 1300px;
+      display: block;
+    }
+    
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(310px, 1fr));
+      gap: 1rem;
+      margin-top: 1.5rem;
+    }
+    
+    .card {
+      background: rgba(15, 23, 42, 0.65);
+      border-radius: 0.75rem;
+      border: 1px solid #1e293b;
+      padding: 1.1rem;
+    }
+    
+    .card-header {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.6rem;
+    }
+    
+    .card-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+    }
+    
+    .card-dot.cyan { background: #22d3ee; }
+    .card-dot.emerald { background: #34d399; }
+    .card-dot.violet { background: #a78bfa; }
+    .card-dot.amber { background: #fbbf24; }
+    .card-dot.rose { background: #fb7185; }
+    .card-dot.orange { background: #fb923c; }
+    
+    .card h3 {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #e2e8f0;
+    }
+    
+    .card ul {
+      list-style: none;
+      color: #94a3b8;
+      font-size: 0.78rem;
+      line-height: 1.55;
+    }
+    
+    .card li {
+      margin-bottom: 0.4rem;
+    }
+
+    .seq-tag {
+      display: inline-block;
+      padding: 1px 5px;
+      font-size: 0.72rem;
+      font-weight: 700;
+      border-radius: 4px;
+      margin-right: 4px;
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+
+    /* 重复发送与重复消费深度解析样式 */
+    .analysis-section {
+      margin-top: 2rem;
+      background: rgba(15, 23, 42, 0.7);
+      border-radius: 1rem;
+      border: 1px solid #1e293b;
+      padding: 1.5rem;
+    }
+
+    .section-title-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+      margin-bottom: 1.25rem;
+      border-bottom: 1px solid #334155;
+      padding-bottom: 0.75rem;
+    }
+
+    .section-title-bar h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+
+    .scenario-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
+      gap: 1.25rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .scenario-card {
+      background: rgba(30, 41, 59, 0.4);
+      border-radius: 0.75rem;
+      border: 1px solid #334155;
+      padding: 1.25rem;
+    }
+
+    .scenario-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 1rem;
+      padding-bottom: 0.5rem;
+      border-bottom: 1px dashed #475569;
+    }
+
+    .scenario-header h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .scenario-item {
+      margin-bottom: 1rem;
+      background: rgba(15, 23, 42, 0.5);
+      border-radius: 0.5rem;
+      padding: 0.75rem;
+      border-left: 3px solid #38bdf8;
+    }
+
+    .scenario-item.orange { border-left-color: #fb923c; }
+    .scenario-item.rose { border-left-color: #fb7185; }
+
+    .scenario-item h4 {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: #e2e8f0;
+      margin-bottom: 0.3rem;
+    }
+
+    .scenario-item p {
+      font-size: 0.78rem;
+      color: #94a3b8;
+      line-height: 1.5;
+      margin-bottom: 0.25rem;
+    }
+
+    .scenario-item .badge-trigger {
+      display: inline-block;
+      font-size: 0.7rem;
+      padding: 1px 6px;
+      border-radius: 3px;
+      background: rgba(251, 146, 60, 0.15);
+      color: #fb923c;
+      border: 1px solid rgba(251, 146, 60, 0.3);
+      margin-bottom: 0.3rem;
+    }
+
+    .scenario-item .badge-trigger.rose {
+      background: rgba(251, 113, 133, 0.15);
+      color: #fb7185;
+      border-color: rgba(251, 113, 133, 0.3);
+    }
+
+    .summary-table-container {
+      overflow-x: auto;
+      margin-top: 1rem;
+      border-radius: 0.5rem;
+      border: 1px solid #334155;
+    }
+
+    table.analysis-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.78rem;
+      text-align: left;
+    }
+
+    table.analysis-table th {
+      background: rgba(30, 41, 59, 0.8);
+      color: #e2e8f0;
+      padding: 0.75rem 1rem;
+      font-weight: 600;
+      border-bottom: 1px solid #475569;
+    }
+
+    table.analysis-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid #1e293b;
+      color: #94a3b8;
+      line-height: 1.5;
+    }
+
+    table.analysis-table tr:hover td {
+      background: rgba(30, 41, 59, 0.3);
+    }
+
+    .conclusion-box {
+      margin-top: 1.25rem;
+      padding: 1rem;
+      background: rgba(30, 58, 138, 0.2);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 0.5rem;
+      font-size: 0.82rem;
+      color: #bae6fd;
+      line-height: 1.6;
+    }
+    
+    .footer {
+      text-align: center;
+      margin-top: 1.5rem;
+      color: #475569;
+      font-size: 0.75rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="header-row">
+        <div class="pulse-dot"></div>
+        <h1>Transactional Outbox 模式全景架构图（各节点内执行时序编号版）</h1>
+      </div>
+      <p class="subtitle">标注说明：每个独立物理/逻辑节点内的操作均用带有青蓝底色的数字序号 ① ➔ ② ➔ ③ ... 清晰标识执行顺序</p>
+    </div>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1360 1080">
+        <defs>
+          <marker id="arrow-cyan" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 9 3, 0 6" fill="#22d3ee" />
+          </marker>
+          <marker id="arrow-emerald" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 9 3, 0 6" fill="#34d399" />
+          </marker>
+          <marker id="arrow-violet" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 9 3, 0 6" fill="#a78bfa" />
+          </marker>
+          <marker id="arrow-amber" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 9 3, 0 6" fill="#fbbf24" />
+          </marker>
+          <marker id="arrow-orange" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 9 3, 0 6" fill="#fb923c" />
+          </marker>
+          <marker id="arrow-rose" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 9 3, 0 6" fill="#fb7185" />
+          </marker>
+          <marker id="arrow-slate" markerWidth="9" markerHeight="6" refX="8" refY="3" orient="auto">
+            <polygon points="0 0, 9 3, 0 6" fill="#64748b" />
+          </marker>
+          <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
+            <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#1e293b" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+
+        <rect width="100%" height="100%" fill="url(#grid)" />
+
+        <!-- =================================================================
+             REGIONS & BOUNDARIES
+             ================================================================= -->
+
+        <!-- 1. 用户端与应用微服务节点 -->
+        <rect x="30" y="30" width="1300" height="150" rx="10" fill="rgba(8, 51, 68, 0.15)" stroke="#0e7490" stroke-width="1" stroke-dasharray="6,4"/>
+        <text x="45" y="52" fill="#22d3ee" font-size="11" font-weight="700">【节点区域 1】接入网关与业务应用节点 (Application Service Node)</text>
+
+        <!-- 2. 数据库内部体系节点 -->
+        <rect x="30" y="205" width="630" height="240" rx="10" fill="rgba(76, 29, 149, 0.12)" stroke="#7c3aed" stroke-width="1" stroke-dasharray="6,4"/>
+        <text x="45" y="227" fill="#c084fc" font-size="11" font-weight="700">【节点区域 2】PostgreSQL 数据库节点 (Database Engine Node)</text>
+
+        <!-- 3. 操作系统与内核节点 -->
+        <rect x="30" y="470" width="630" height="205" rx="10" fill="rgba(6, 78, 59, 0.12)" stroke="#059669" stroke-width="1" stroke-dasharray="6,4"/>
+        <text x="45" y="492" fill="#34d399" font-size="11" font-weight="700">【节点区域 3】Linux 操作系统与内核存储栈 (OS Kernel Node)</text>
+
+        <!-- 4. 物理存储硬件节点 -->
+        <rect x="30" y="700" width="630" height="240" rx="10" fill="rgba(136, 19, 55, 0.12)" stroke="#e11d48" stroke-width="1" stroke-dasharray="6,4"/>
+        <text x="45" y="722" fill="#fb7185" font-size="11" font-weight="700">【节点区域 4】底层物理存储硬件介质 (Enterprise NVMe Storage Node)</text>
+
+        <!-- 5. CDC / Relay 消息中继节点 -->
+        <rect x="700" y="205" width="630" height="240" rx="10" fill="rgba(120, 53, 15, 0.12)" stroke="#d97706" stroke-width="1" stroke-dasharray="6,4"/>
+        <text x="715" y="227" fill="#fbbf24" font-size="11" font-weight="700">【节点区域 5】Debezium CDC 消息中继节点 (Message Relay Node)</text>
+
+        <!-- 6. 分布式消息集群节点 -->
+        <rect x="700" y="470" width="630" height="235" rx="10" fill="rgba(251, 146, 60, 0.12)" stroke="#ea580c" stroke-width="1" stroke-dasharray="6,4"/>
+        <text x="715" y="492" fill="#fb923c" font-size="11" font-weight="700">【节点区域 6】Kafka 分布式消息集群 (Kafka Cluster Node)</text>
+
+        <!-- 7. 下游消费端节点 -->
+        <rect x="700" y="730" width="630" height="210" rx="10" fill="rgba(30, 41, 59, 0.3)" stroke="#475569" stroke-width="1" stroke-dasharray="6,4"/>
+        <text x="715" y="752" fill="#94a3b8" font-size="11" font-weight="700">【节点区域 7】下游业务消费端节点 (Consumer Application Node)</text>
+
+        <!-- =================================================================
+             COMPONENTS & IN-NODE SEQUENTIAL OPERATIONS
+             ================================================================= -->
+
+        <!-- 1.1 客户端与网关 -->
+        <rect x="50" y="70" width="125" height="85" rx="6" fill="#0f172a" stroke="#22d3ee" stroke-width="1.5"/>
+        <text x="112" y="96" fill="#ffffff" font-size="11" font-weight="700" text-anchor="middle">用户端浏览器</text>
+        <text x="112" y="114" fill="#94a3b8" font-size="9" text-anchor="middle">React / Vue / App</text>
+        <text x="112" y="132" fill="#38bdf8" font-size="8" text-anchor="middle">触发创建订单</text>
+
+        <rect x="230" y="70" width="130" height="85" rx="6" fill="#0f172a" stroke="#94a3b8" stroke-width="1.5"/>
+        <text x="295" y="96" fill="#ffffff" font-size="11" font-weight="700" text-anchor="middle">API 网关 / Ingress</text>
+        <text x="295" y="114" fill="#94a3b8" font-size="9" text-anchor="middle">Nginx / Kong / K8s</text>
+        <text x="295" y="132" fill="#cbd5e1" font-size="8" text-anchor="middle">鉴权 / 限流 / 路由</text>
+
+        <!-- 1.2 业务微服务内部时序 -->
+        <rect x="420" y="60" width="560" height="105" rx="8" fill="#0f172a" stroke="#34d399" stroke-width="1.8"/>
+        <text x="435" y="80" fill="#34d399" font-size="10" font-weight="700">业务应用节点内部执行时序 (Spring Boot / Go Service)</text>
+
+        <!-- 应用节点内步骤 1, 2, 3, 4 -->
+        <rect x="435" y="88" width="120" height="65" rx="5" fill="#1e293b" stroke="#059669" stroke-width="1"/>
+        <circle cx="452" cy="104" r="7" fill="#0284c7" />
+        <text x="452" y="108" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">1</text>
+        <text x="465" y="107" fill="#ffffff" font-size="9" font-weight="700">开启本地事务</text>
+        <text x="445" y="125" fill="#94a3b8" font-size="8">@Transactional</text>
+        <text x="445" y="140" fill="#6ee7b7" font-size="8">BEGIN TRANSACTION</text>
+
+        <rect x="565" y="88" width="135" height="65" rx="5" fill="#1e293b" stroke="#059669" stroke-width="1"/>
+        <circle cx="582" cy="104" r="7" fill="#0284c7" />
+        <text x="582" y="108" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">2</text>
+        <text x="595" y="107" fill="#ffffff" font-size="9" font-weight="700">写业务表</text>
+        <text x="575" y="125" fill="#94a3b8" font-size="8">INSERT INTO orders</text>
+        <text x="575" y="140" fill="#a7f3d0" font-size="8">order_status='INIT'</text>
+
+        <rect x="710" y="88" width="140" height="65" rx="5" fill="#1e293b" stroke="#059669" stroke-width="1"/>
+        <circle cx="727" cy="104" r="7" fill="#0284c7" />
+        <text x="727" y="108" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">3</text>
+        <text x="740" y="107" fill="#ffffff" font-size="9" font-weight="700">写发件箱表</text>
+        <text x="720" y="125" fill="#94a3b8" font-size="8">INSERT INTO outbox</text>
+        <text x="720" y="140" fill="#a7f3d0" font-size="8">event_id, payload</text>
+
+        <rect x="860" y="88" width="110" height="65" rx="5" fill="#1e293b" stroke="#059669" stroke-width="1"/>
+        <circle cx="877" cy="104" r="7" fill="#0284c7" />
+        <text x="877" y="108" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">4</text>
+        <text x="890" y="107" fill="#ffffff" font-size="9" font-weight="700">发起提交</text>
+        <text x="870" y="125" fill="#94a3b8" font-size="8">发送 COMMIT ➔</text>
+        <text x="870" y="140" fill="#fca5a5" font-size="8">同步阻塞等待响应</text>
+
+        <!-- 2. PostgreSQL 数据库节点内部时序 -->
+        <!-- 2.1 Backend Process [①] & [⑤] -->
+        <rect x="50" y="245" width="170" height="75" rx="6" fill="#0f172a" stroke="#a78bfa" stroke-width="1.5"/>
+        <circle cx="68" cy="263" r="7" fill="#0284c7" />
+        <text x="68" y="267" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">1</text>
+        <text x="82" y="266" fill="#ffffff" font-size="10" font-weight="700">接收解析 SQL</text>
+        <text x="60" y="284" fill="#c4b5fd" font-size="8">事务执行器开启会话</text>
+        <line x1="60" y1="292" x2="210" y2="292" stroke="#475569" stroke-width="0.8"/>
+        <circle cx="68" cy="305" r="7" fill="#0284c7" />
+        <text x="68" y="309" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">5</text>
+        <text x="82" y="308" fill="#34d399" font-size="9" font-weight="700">应答 COMMIT OK</text>
+
+        <!-- 2.2 Shared Buffers 内存 [②] -->
+        <rect x="250" y="245" width="175" height="75" rx="6" fill="#0f172a" stroke="#a78bfa" stroke-width="1.5"/>
+        <circle cx="268" cy="263" r="7" fill="#0284c7" />
+        <text x="268" y="267" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">2</text>
+        <text x="282" y="266" fill="#ffffff" font-size="10" font-weight="700">修改 Shared Buffers</text>
+        <text x="260" y="285" fill="#fca5a5" font-size="8">将数据页标为 Dirty (脏页)</text>
+        <text x="260" y="302" fill="#94a3b8" font-size="8">※ 此时物理 Heap 文件未落盘</text>
+
+        <!-- 2.3 WAL Buffers [③] & [④] -->
+        <rect x="50" y="340" width="375" height="85" rx="6" fill="#0f172a" stroke="#c084fc" stroke-width="1.8"/>
+        <circle cx="68" cy="358" r="7" fill="#0284c7" />
+        <text x="68" y="362" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">3</text>
+        <text x="82" y="361" fill="#ffffff" font-size="10" font-weight="700">顺序追加 WAL Buffers 内存</text>
+        <text x="68" y="380" fill="#a78bfa" font-size="8.5">写入事务记录：LSN=101(orders), LSN=102(outbox), COMMIT Record</text>
+        <line x1="60" y1="390" x2="415" y2="390" stroke="#475569" stroke-width="0.8"/>
+        <circle cx="68" cy="405" r="7" fill="#0284c7" />
+        <text x="68" y="409" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">4</text>
+        <text x="82" y="408" fill="#34d399" font-size="10" font-weight="700">调用 fdatasync(wal_fd) 同步刷盘</text>
+        <text x="275" y="408" fill="#fbbf24" font-size="8">(挂起后端线程，等待硬件返回)</text>
+
+        <!-- 2.4 Logical Decoding & Replication Slot [⑥] -->
+        <rect x="445" y="245" width="200" height="95" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+        <circle cx="463" cy="263" r="7" fill="#0284c7" />
+        <text x="463" y="267" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">6</text>
+        <text x="477" y="266" fill="#fbbf24" font-size="10" font-weight="700">逻辑解码 (pgoutput)</text>
+        <text x="455" y="284" fill="#94a3b8" font-size="8">• 从 WAL 提取已提交行变更</text>
+        <text x="455" y="300" fill="#94a3b8" font-size="8">• 锁定 WAL 进度 (Slot Lock)</text>
+        <text x="455" y="316" fill="#38bdf8" font-size="8">• 推送流式事件给从库客户端</text>
+
+        <!-- 2.5 异步 Checkpointer [⑦] -->
+        <rect x="445" y="355" width="200" height="70" rx="6" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+        <circle cx="463" cy="373" r="7" fill="#0284c7" />
+        <text x="463" y="377" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">7</text>
+        <text x="477" y="376" fill="#94a3b8" font-size="9" font-weight="700">后台异步 Checkpointer</text>
+        <text x="455" y="394" fill="#64748b" font-size="8">• 周期性平摊将脏页刷入表文件</text>
+        <text x="455" y="410" fill="#64748b" font-size="8">• 崩溃全靠前序 WAL REDO 恢复</text>
+
+        <!-- 3. Linux 操作系统内核节点内部时序 -->
+        <rect x="50" y="505" width="115" height="80" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+        <circle cx="68" cy="523" r="7" fill="#0284c7" />
+        <text x="68" y="527" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">1</text>
+        <text x="82" y="526" fill="#ffffff" font-size="9" font-weight="700">捕获系统调用</text>
+        <text x="58" y="546" fill="#6ee7b7" font-size="8">sys_fdatasync</text>
+        <text x="58" y="562" fill="#94a3b8" font-size="8">获取 wal_fd 锁</text>
+        <text x="58" y="576" fill="#94a3b8" font-size="7">挂起当前进程</text>
+
+        <rect x="180" y="505" width="135" height="80" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+        <circle cx="198" cy="523" r="7" fill="#0284c7" />
+        <text x="198" y="527" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">2</text>
+        <text x="212" y="526" fill="#ffffff" font-size="9" font-weight="700">VFS / PageCache</text>
+        <text x="188" y="546" fill="#fbbf24" font-size="8">穿透内存延迟机制</text>
+        <text x="188" y="562" fill="#94a3b8" font-size="8">标记 dirty pages</text>
+        <text x="188" y="576" fill="#94a3b8" font-size="7">强制下推给 I/O 队列</text>
+
+        <rect x="330" y="505" width="145" height="80" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+        <circle cx="348" cy="523" r="7" fill="#0284c7" />
+        <text x="348" y="527" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">3</text>
+        <text x="362" y="526" fill="#ffffff" font-size="9" font-weight="700">通用块层 I/O 调度</text>
+        <text x="338" y="546" fill="#6ee7b7" font-size="8">组装 Write Barrier</text>
+        <text x="338" y="562" fill="#94a3b8" font-size="8">保障日志顺序严谨</text>
+        <text x="338" y="576" fill="#94a3b8" font-size="7">提交 bio 请求到驱动</text>
+
+        <rect x="490" y="505" width="155" height="80" rx="6" fill="#0f172a" stroke="#34d399" stroke-width="1.5"/>
+        <circle cx="508" cy="523" r="7" fill="#0284c7" />
+        <text x="508" y="527" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">4</text>
+        <text x="522" y="526" fill="#ffffff" font-size="9" font-weight="700">NVMe 驱动层协议</text>
+        <text x="498" y="546" fill="#fbbf24" font-size="8">下发 Flush (00h) 指令</text>
+        <text x="498" y="562" fill="#94a3b8" font-size="8">带 FUA 标志直接写介质</text>
+        <text x="498" y="576" fill="#38bdf8" font-size="7">提交到 PCIe 硬件队列</text>
+
+        <!-- OS 内核第 5 步：唤醒 -->
+        <rect x="50" y="605" width="595" height="50" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+        <circle cx="68" cy="630" r="7" fill="#0284c7" />
+        <text x="68" y="634" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">5</text>
+        <text x="82" y="628" fill="#34d399" font-size="9" font-weight="700">接收硬件控制器完成中断 (MSI-X Interrupt) ➔ 唤醒 Postgres 进程</text>
+        <text x="82" y="645" fill="#94a3b8" font-size="8">操作系统解除 fdatasync 挂起状态，将执行控制权安全交回 PostgreSQL 数据库引擎。</text>
+
+        <!-- 4. 物理存储硬件节点内部时序 -->
+        <rect x="50" y="740" width="170" height="90" rx="6" fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
+        <circle cx="68" cy="758" r="7" fill="#0284c7" />
+        <text x="68" y="762" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">1</text>
+        <text x="82" y="761" fill="#ffffff" font-size="10" font-weight="700">NVMe 控制器固件</text>
+        <text x="58" y="782" fill="#fda4af" font-size="8">• 解析 Flush 命令队列</text>
+        <text x="58" y="798" fill="#94a3b8" font-size="8">• 协调 DRAM 刷入 NAND</text>
+        <text x="58" y="814" fill="#94a3b8" font-size="7">• 阻止乱序重排破坏日志</text>
+
+        <rect x="235" y="740" width="200" height="90" rx="6" fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
+        <circle cx="253" cy="758" r="7" fill="#0284c7" />
+        <text x="253" y="762" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">2</text>
+        <text x="267" y="761" fill="#ffffff" font-size="10" font-weight="700">DRAM 易失缓存与 PLP</text>
+        <text x="243" y="782" fill="#fb7185" font-size="8.5" font-weight="600">★ PLP (钽电容掉电硬件保护)</text>
+        <text x="243" y="798" fill="#fca5a5" font-size="8">• 正常：毫秒级转储 DRAM 缓存</text>
+        <text x="243" y="814" fill="#94a3b8" font-size="8">• 掉电：电容毫秒放电强行刷盘</text>
+
+        <rect x="450" y="740" width="195" height="90" rx="6" fill="#0f172a" stroke="#f43f5e" stroke-width="1.8"/>
+        <circle cx="468" cy="758" r="7" fill="#0284c7" />
+        <text x="468" y="762" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">3</text>
+        <text x="482" y="761" fill="#ffffff" font-size="10" font-weight="700">NAND Flash 物理介质</text>
+        <text x="458" y="782" fill="#34d399" font-size="8" font-weight="700">【非易失性物理落盘完成】</text>
+        <text x="458" y="798" fill="#fda4af" font-size="8">• WAL Segment 扇区真正固化</text>
+        <text x="458" y="814" fill="#94a3b8" font-size="7">• 数据即便彻底断电绝不丢失</text>
+
+        <rect x="50" y="850" width="595" height="65" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+        <circle cx="68" cy="875" r="7" fill="#0284c7" />
+        <text x="68" y="879" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">4</text>
+        <text x="82" y="872" fill="#34d399" font-size="9" font-weight="700">硬件控制器向主机 PCIe 总线发出写入完成确认中断 (Hardware ACK)</text>
+        <text x="82" y="890" fill="#94a3b8" font-size="8">至此，单机数据库层面的本地事务完成最严苛的物理闭环！</text>
+
+        <!-- 5. CDC / Relay 消息中继节点内部时序 -->
+        <rect x="715" y="245" width="280" height="85" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+        <circle cx="733" cy="263" r="7" fill="#0284c7" />
+        <text x="733" y="267" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">1</text>
+        <text x="747" y="266" fill="#ffffff" font-size="10" font-weight="700">从复制槽拉取 LSN 事件</text>
+        <text x="725" y="284" fill="#fef08a" font-size="8">• 监听 outbox 表 INSERT 行变更</text>
+        <line x1="725" y1="292" x2="985" y2="292" stroke="#475569" stroke-width="0.8"/>
+        <circle cx="733" cy="305" r="7" fill="#0284c7" />
+        <text x="733" y="309" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">2</text>
+        <text x="747" y="308" fill="#ffffff" font-size="10" font-weight="700">反序列化与消息封装</text>
+        <text x="725" y="323" fill="#94a3b8" font-size="8">• 提取全局唯一业务键 event_id</text>
+
+        <rect x="1015" y="245" width="295" height="85" rx="6" fill="#0f172a" stroke="#fbbf24" stroke-width="1.5"/>
+        <circle cx="1033" cy="263" r="7" fill="#0284c7" />
+        <text x="1033" y="267" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">3</text>
+        <text x="1047" y="266" fill="#ffffff" font-size="10" font-weight="700">Kafka Producer 生产请求</text>
+        <text x="1025" y="284" fill="#fbbf24" font-size="8">• acks=all, retries=MAX, 幂等发送</text>
+        <line x1="1025" y1="292" x2="1300" y2="292" stroke="#475569" stroke-width="0.8"/>
+        <circle cx="1033" cy="305" r="7" fill="#0284c7" />
+        <text x="1033" y="309" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">4</text>
+        <text x="1047" y="308" fill="#34d399" font-size="10" font-weight="700">收到 Kafka Broker 成功 ACK</text>
+        <text x="1025" y="323" fill="#6ee7b7" font-size="8">• 确认全量 ISR 副本同步落盘</text>
+
+        <!-- CDC 节点第 5, 6 步 -->
+        <rect x="715" y="350" width="595" height="75" rx="6" fill="#1e293b" stroke="#475569" stroke-width="1"/>
+        <circle cx="733" cy="370" r="7" fill="#0284c7" />
+        <text x="733" y="374" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">5</text>
+        <text x="747" y="373" fill="#38bdf8" font-size="9" font-weight="700">向 Postgres 复制槽反馈确认 LSN (Slot Advance)</text>
+        <text x="747" y="389" fill="#94a3b8" font-size="8">Postgres 推进 confirmed_flush_lsn，允许后续垃圾回收对应段的 WAL 日志。</text>
+        <line x1="725" y1="398" x2="1300" y2="398" stroke="#334155" stroke-width="0.8"/>
+        <circle cx="733" cy="412" r="7" fill="#0284c7" />
+        <text x="733" y="416" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">6</text>
+        <text x="747" y="415" fill="#a7f3d0" font-size="9" font-weight="700">向 Kafka 内部主题 connect-offsets 提交中继消费位点</text>
+
+        <!-- 6. Kafka 集群节点内部时序 -->
+        <rect x="715" y="505" width="180" height="110" rx="6" fill="#0f172a" stroke="#fb923c" stroke-width="1.8"/>
+        <circle cx="733" cy="523" r="7" fill="#0284c7" />
+        <text x="733" y="527" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">1</text>
+        <text x="747" y="526" fill="#ffffff" font-size="10" font-weight="700">Broker 1 (Leader)</text>
+        <text x="725" y="546" fill="#fed7aa" font-size="8">写入本地 Partition 0 日志</text>
+        <text x="725" y="562" fill="#34d399" font-size="8">PageCache 顺序追加</text>
+        <line x1="725" y1="570" x2="885" y2="570" stroke="#475569" stroke-width="0.8"/>
+        <circle cx="733" cy="583" r="7" fill="#0284c7" />
+        <text x="733" y="587" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">4</text>
+        <text x="747" y="586" fill="#34d399" font-size="9" font-weight="700">回传 ACK 给 Producer</text>
+
+        <rect x="915" y="505" width="185" height="110" rx="6" fill="#0f172a" stroke="#fb923c" stroke-width="1.2"/>
+        <circle cx="933" cy="523" r="7" fill="#0284c7" />
+        <text x="933" y="527" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">2</text>
+        <text x="947" y="526" fill="#ffffff" font-size="10" font-weight="700">Broker 2 (Follower)</text>
+        <text x="925" y="546" fill="#fed7aa" font-size="8">在 ISR 集合内同步拉取</text>
+        <text x="925" y="562" fill="#a7f3d0" font-size="8">写入副本日志并应答 Leader</text>
+        <text x="925" y="586" fill="#94a3b8" font-size="8">min.insync.replicas=2</text>
+
+        <rect x="1120" y="505" width="190" height="110" rx="6" fill="#0f172a" stroke="#fb923c" stroke-width="1.2"/>
+        <circle cx="1138" cy="523" r="7" fill="#0284c7" />
+        <text x="1138" y="527" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">2</text>
+        <text x="1152" y="526" fill="#ffffff" font-size="10" font-weight="700">Broker 3 (Follower)</text>
+        <text x="1130" y="546" fill="#fed7aa" font-size="8">在 ISR 集合内同步拉取</text>
+        <text x="1130" y="562" fill="#a7f3d0" font-size="8">unclean.election=false</text>
+        <text x="1130" y="586" fill="#94a3b8" font-size="8">禁止脱离同步副本抢主</text>
+
+        <rect x="715" y="630" width="595" height="55" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+        <circle cx="733" cy="655" r="7" fill="#0284c7" />
+        <text x="733" y="659" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">3</text>
+        <text x="747" y="652" fill="#fb923c" font-size="10" font-weight="700">多数派副本确认达成 ➔ 推进高水位 (High Watermark, HW)</text>
+        <text x="747" y="669" fill="#94a3b8" font-size="8">只有 HW 推进后，该消息才正式对下游消费者暴露可见，杜绝读取到未同步幽灵数据。</text>
+
+        <!-- 7. 消费端节点内部时序 -->
+        <rect x="715" y="765" width="145" height="85" rx="6" fill="#0f172a" stroke="#94a3b8" stroke-width="1.5"/>
+        <circle cx="733" cy="783" r="7" fill="#0284c7" />
+        <text x="733" y="787" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">1</text>
+        <text x="747" y="786" fill="#ffffff" font-size="10" font-weight="700">拉取消息</text>
+        <text x="725" y="805" fill="#fca5a5" font-size="8">关闭 auto.commit</text>
+        <text x="725" y="821" fill="#94a3b8" font-size="8">poll(records) ≤ HW</text>
+        <text x="725" y="836" fill="#6ee7b7" font-size="7">获取单条或批次</text>
+
+        <rect x="875" y="765" width="200" height="85" rx="6" fill="#0f172a" stroke="#fb7185" stroke-width="1.5"/>
+        <circle cx="893" cy="783" r="7" fill="#0284c7" />
+        <text x="893" y="787" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">2</text>
+        <text x="907" y="786" fill="#ffffff" font-size="10" font-weight="700">强幂等核验防线</text>
+        <text x="885" y="805" fill="#fb7185" font-size="8">• Redis SETNX event_id</text>
+        <text x="885" y="821" fill="#fda4af" font-size="8">• DB 唯一键约束 / 状态机</text>
+        <text x="885" y="836" fill="#34d399" font-size="7">重复消息直接防重过滤</text>
+
+        <rect x="1090" y="765" width="140" height="85" rx="6" fill="#0f172a" stroke="#22d3ee" stroke-width="1.5"/>
+        <circle cx="1108" cy="783" r="7" fill="#0284c7" />
+        <text x="1108" y="787" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">3</text>
+        <text x="1122" y="786" fill="#ffffff" font-size="10" font-weight="700">执行实际业务</text>
+        <text x="1100" y="805" fill="#67e8f9" font-size="8">扣减库存 / 财务记账</text>
+        <text x="1100" y="821" fill="#94a3b8" font-size="8">触发后续工作流</text>
+        <text x="1100" y="836" fill="#34d399" font-size="7">确保业务写入成功</text>
+
+        <rect x="1245" y="765" width="70" height="85" rx="6" fill="#1e293b" stroke="#34d399" stroke-width="1.5"/>
+        <circle cx="1260" cy="783" r="7" fill="#0284c7" />
+        <text x="1260" y="787" fill="#ffffff" font-size="9" font-weight="700" text-anchor="middle">4</text>
+        <text x="1280" y="786" fill="#34d399" font-size="9" font-weight="700">提交位点</text>
+        <text x="1252" y="805" fill="#a7f3d0" font-size="7.5">commitSync()</text>
+        <text x="1252" y="821" fill="#94a3b8" font-size="7.5">手动提交</text>
+        <text x="1252" y="836" fill="#6ee7b7" font-size="7.5">闭环完成</text>
+
+        <rect x="715" y="865" width="600" height="55" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+        <text x="1015" y="888" fill="#38bdf8" font-size="9.5" font-weight="700" text-anchor="middle">全链路可靠性闭环准则</text>
+        <text x="1015" y="906" fill="#a7f3d0" font-size="8.5" text-anchor="middle">生产端 At-Least-Once (至少一次) + 消费端 At-Least-Once (严格先成功后Commit) + 强幂等 = 绝对一致</text>
+
+        <!-- =================================================================
+             CROSS-NODE FLOW ARROWS
+             ================================================================= -->
+
+        <!-- 浏览器 -> 网关 -> 应用 -->
+        <line x1="175" y1="112" x2="222" y2="112" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+        <line x1="360" y1="112" x2="412" y2="112" stroke="#94a3b8" stroke-width="1.5" marker-end="url(#arrow-slate)"/>
+
+        <!-- 应用微服务 步骤 4 COMMIT ➔ PostgreSQL 步骤 1 -->
+        <path d="M 915 155 L 915 185 Q 915 195 895 195 L 135 195 L 135 237" fill="none" stroke="#a78bfa" stroke-width="2" marker-end="url(#arrow-violet)"/>
+        <text x="525" y="190" fill="#c084fc" font-size="9" font-weight="600" text-anchor="middle">TCP 连接：发送 SQL 批次 & COMMIT 命令 ➔</text>
+
+        <!-- PostgreSQL 内部步骤 1 ➔ 2 ➔ 3 -->
+        <line x1="220" y1="282" x2="242" y2="282" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrow-violet)"/>
+        <path d="M 337 320 L 337 332" fill="none" stroke="#a78bfa" stroke-width="1.5" marker-end="url(#arrow-violet)"/>
+
+        <!-- PostgreSQL 步骤 4 fdatasync ➔ OS 内核 步骤 1 -->
+        <path d="M 107 425 L 107 497" fill="none" stroke="#34d399" stroke-width="2" marker-end="url(#arrow-emerald)"/>
+        <text x="120" y="460" fill="#34d399" font-size="9" font-weight="700">fdatasync() 系统调用</text>
+
+        <!-- OS 内核步骤 1 ➔ 2 ➔ 3 ➔ 4 -->
+        <line x1="165" y1="545" x2="172" y2="545" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+        <line x1="315" y1="545" x2="322" y2="545" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+        <line x1="475" y1="545" x2="482" y2="545" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+
+        <!-- OS 步骤 4 Flush ➔ 硬件 步骤 1 -->
+        <path d="M 567 585 L 567 685 L 135 685 L 135 732" fill="none" stroke="#fb7185" stroke-width="1.8" marker-end="url(#arrow-rose)"/>
+        <text x="350" y="680" fill="#fb7185" font-size="9" font-weight="600" text-anchor="middle">NVMe Flush (00h) / FUA 物理协议控制指令</text>
+
+        <!-- 硬件步骤 1 ➔ 2 ➔ 3 ➔ 4 -->
+        <line x1="220" y1="785" x2="227" y2="785" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrow-rose)"/>
+        <line x1="435" y1="785" x2="442" y2="785" stroke="#f43f5e" stroke-width="2" marker-end="url(#arrow-rose)"/>
+        <path d="M 547 830 L 547 842" fill="none" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrow-rose)"/>
+
+        <!-- 硬件步骤 4 ACK ➔ OS 内核步骤 5 中断唤醒 ➔ PostgreSQL 步骤 5 应答 COMMIT OK -->
+        <path d="M 80 850 L 80 663" fill="none" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrow-emerald)"/>
+        <path d="M 120 605 L 120 328" fill="none" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrow-emerald)"/>
+        <text x="70" y="675" fill="#34d399" font-size="8" text-anchor="end">硬件中断</text>
+
+        <!-- PostgreSQL 步骤 5 COMMIT OK ➔ 应用服务 -->
+        <path d="M 135 245 L 135 210 Q 135 200 155 200 L 915 200 L 915 163" fill="none" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrow-emerald)"/>
+        <text x="525" y="212" fill="#34d399" font-size="8" text-anchor="middle">客户端收到 COMMIT OK 响应</text>
+
+        <!-- PostgreSQL 步骤 3/6 ➔ Debezium 步骤 1 (复制槽拉取) -->
+        <path d="M 645 292 L 707 292" fill="none" stroke="#fbbf24" stroke-width="2" marker-end="url(#arrow-amber)"/>
+        <text x="676" y="285" fill="#fbbf24" font-size="8" font-weight="600" text-anchor="middle">逻辑解码流</text>
+
+        <!-- Debezium 步骤 2 ➔ 步骤 3 ➔ Kafka Leader 步骤 1 -->
+        <line x1="995" y1="287" x2="1007" y2="287" stroke="#fbbf24" stroke-width="1.5" marker-end="url(#arrow-amber)"/>
+        <path d="M 1162 330 L 1162 445 L 805 445 L 805 497" fill="none" stroke="#fb923c" stroke-width="2" marker-end="url(#arrow-orange)"/>
+        <text x="980" y="438" fill="#fb923c" font-size="9" font-weight="700" text-anchor="middle">Kafka Producer 发送请求 (acks=all)</text>
+
+        <!-- Kafka Leader 步骤 1 ➔ Follower 步骤 2 ➔ 推进 HW 步骤 3 ➔ 回传 ACK 步骤 4 -->
+        <line x1="895" y1="560" x2="907" y2="560" stroke="#fb923c" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+        <line x1="1100" y1="560" x2="1112" y2="560" stroke="#fb923c" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+        <path d="M 1007 615 L 1007 622" fill="none" stroke="#fb923c" stroke-width="1.5" marker-end="url(#arrow-orange)"/>
+
+        <!-- Kafka 步骤 4 Leader ACK ➔ Debezium 步骤 4 收到 ACK -->
+        <path d="M 830 505 L 830 460 L 1200 460 L 1200 338" fill="none" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrow-emerald)"/>
+        <text x="1015" y="473" fill="#34d399" font-size="8" text-anchor="middle">全量 ISR 同步完成回传 ACK</text>
+
+        <!-- Debezium 步骤 5 反馈推进 Postgres Replication Slot -->
+        <path d="M 740 425 L 740 440 L 610 440 L 610 348" fill="none" stroke="#38bdf8" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrow-cyan)"/>
+        <text x="670" y="434" fill="#38bdf8" font-size="8" text-anchor="middle">反馈确认 LSN</text>
+
+        <!-- Kafka HW 步骤 3 ➔ 消费端 步骤 1 (拉取) -->
+        <path d="M 805 615 L 805 757" fill="none" stroke="#94a3b8" stroke-width="1.8" marker-end="url(#arrow-slate)"/>
+        <text x="815" y="710" fill="#94a3b8" font-size="8">拉取 HW 范围消息</text>
+
+        <!-- 消费端步骤 1 ➔ 2 ➔ 3 ➔ 4 -->
+        <line x1="860" y1="807" x2="867" y2="807" stroke="#fb7185" stroke-width="1.5" marker-end="url(#arrow-rose)"/>
+        <line x1="1075" y1="807" x2="1082" y2="807" stroke="#22d3ee" stroke-width="1.5" marker-end="url(#arrow-cyan)"/>
+        <line x1="1230" y1="807" x2="1237" y2="807" stroke="#34d399" stroke-width="1.5" marker-end="url(#arrow-emerald)"/>
+
+        <!-- 消费端步骤 4 提交位点 ➔ Kafka Broker -->
+        <path d="M 1280 765 L 1280 710 L 850 710 L 850 623" fill="none" stroke="#34d399" stroke-width="1.2" stroke-dasharray="3,3" marker-end="url(#arrow-emerald)"/>
+        <text x="1050" y="704" fill="#34d399" font-size="7.5" text-anchor="middle">commitSync() 提交 __consumer_offsets</text>
+
+        <!-- =================================================================
+             TOP/CORNER BADGES & LEGEND
+             ================================================================= -->
+        <rect x="1010" y="45" width="310" height="75" rx="6" fill="#1e293b" stroke="#334155" stroke-width="1"/>
+        <text x="1025" y="63" fill="#ffffff" font-size="9" font-weight="700">图例说明 (Legend)</text>
+        <circle cx="1035" cy="79" r="6" fill="#0284c7" />
+        <text x="1035" y="82" fill="#ffffff" font-size="8" font-weight="700" text-anchor="middle">N</text>
+        <text x="1048" y="82" fill="#38bdf8" font-size="8" font-weight="600">节点内部严格顺序序号 (①➔②➔...)</text>
+        <line x1="1025" y1="98" x2="1055" y2="98" stroke="#34d399" stroke-width="2"/>
+        <text x="1065" y="101" fill="#94a3b8" font-size="8">跨节点强一致推进路径</text>
+        <line x1="1170" y1="98" x2="1200" y2="98" stroke="#34d399" stroke-width="1.5" stroke-dasharray="4,4"/>
+        <text x="1208" y="101" fill="#94a3b8" font-size="8">ACK / 回传唤醒流</text>
+      </svg>
+    </div>
+
+    <!-- Info Cards with Explicit Sequential Steps -->
+    <div class="cards">
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>节点 1：业务应用节点执行时序</h3>
+        </div>
+        <ul>
+          <li><span class="seq-tag">① 开启本地事务</span>：调用 <code>@Transactional</code>，绑定底层 DB Connection。</li>
+          <li><span class="seq-tag">② 写入业务表</span>：执行 <code>INSERT INTO orders</code>，数据标为待处理。</li>
+          <li><span class="seq-tag">③ 写入发件箱表</span>：执行 <code>INSERT INTO outbox_table</code>，生成全局 <code>event_id</code>。</li>
+          <li><span class="seq-tag">④ 发起提交</span>：向数据库下发 <code>COMMIT</code>，线程同步挂起等待数据库落盘应答。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot violet"></div>
+          <h3>节点 2：PostgreSQL 内部执行时序</h3>
+        </div>
+        <ul>
+          <li><span class="seq-tag">① SQL解析执行</span>：Backend 进程解析事务语句并执行。</li>
+          <li><span class="seq-tag">② 标记内存脏页</span>：修改 Shared Buffers 数据页，物理 Heap 表暂不刷盘。</li>
+          <li><span class="seq-tag">③ 顺序追加 WAL</span>：将 LSN 日志与 Commit Record 写入 WAL Buffers 内存。</li>
+          <li><span class="seq-tag">④ 调用 fdatasync</span>：发起系统调用强制 WAL 刷盘，当前连接进程阻塞等待。</li>
+          <li><span class="seq-tag">⑤ 响应 COMMIT OK</span>：底层硬件 ACK 穿透回来后，正式向应用返回成功。</li>
+          <li><span class="seq-tag">⑥ 逻辑解码推送</span>：pgoutput 插件读取已提交 WAL，推送至 Replication Slot。</li>
+          <li><span class="seq-tag">⑦ 异步刷脏页</span>：后台 Checkpointer 进程平摊将内存脏页刷入表物理文件。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot emerald"></div>
+          <h3>节点 3：Linux 操作系统内核执行时序</h3>
+        </div>
+        <ul>
+          <li><span class="seq-tag">① 捕获系统调用</span>：<code>sys_fdatasync</code> 捕获文件描述符，挂起调用线程。</li>
+          <li><span class="seq-tag">② VFS/PageCache 穿透</span>：绕过 OS 延时刷写调度，强制将脏页直接下推。</li>
+          <li><span class="seq-tag">③ 块设备 I/O 调度</span>：组装带有 <code>Write Barrier</code>（写屏障）的 bio 队列。</li>
+          <li><span class="seq-tag">④ 下发硬件协议</span>：NVMe 驱动向 PCIe 队列发送 <code>Flush (00h)</code> / <code>FUA</code> 协议指令。</li>
+          <li><span class="seq-tag">⑤ 中断唤醒进程</span>：捕获存储控制器 MSI-X 完成中断，唤醒阻塞的 Postgres 进程。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot rose"></div>
+          <h3>节点 4：物理存储硬件内部执行时序</h3>
+        </div>
+        <ul>
+          <li><span class="seq-tag">① 控制器固件解析</span>：NVMe Controller 解析 Flush 指令，调度介质刷写。</li>
+          <li><span class="seq-tag">② DRAM 缓存与 PLP</span>：正常将 DRAM 缓存刷入颗粒；<strong>断电瞬间由 PLP 钽电容毫秒放电强行刷盘</strong>。</li>
+          <li><span class="seq-tag">③ 物理介质固化</span>：WAL 数据真正落入非易失 NAND Flash 物理颗粒。</li>
+          <li><span class="seq-tag">④ 回传硬件 ACK</span>：固件向系统总线发送写入成功中断应答信号。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot amber"></div>
+          <h3>节点 5：Debezium CDC 消息中继时序</h3>
+        </div>
+        <ul>
+          <li><span class="seq-tag">① 拉取 LSN 变更</span>：模拟从库从 PostgreSQL 复制槽拉取 outbox 行变更事件。</li>
+          <li><span class="seq-tag">② 反序列化封装</span>：将行数据反序列化为带有全局唯一 <code>event_id</code> 的消息体。</li>
+          <li><span class="seq-tag">③ Producer 发送</span>：携带 <code>acks=all</code> 发送到 Kafka Broker（网络抖动无限重试）。</li>
+          <li><span class="seq-tag">④ 收到 Kafka ACK</span>：确认 Kafka 所有 ISR 副本均已完成持久化。</li>
+          <li><span class="seq-tag">⑤ 推进复制槽位点</span>：向 Postgres 反馈进度，更新 <code>confirmed_flush_lsn</code> 释放旧 WAL。</li>
+          <li><span class="seq-tag">⑥ 提交中继位点</span>：将中继状态同步记录到 Kafka <code>connect-offsets</code> 主题。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot orange"></div>
+          <h3>节点 6：Kafka 分布式集群执行时序</h3>
+        </div>
+        <ul>
+          <li><span class="seq-tag">① Leader 写入日志</span>：Partition 0 Leader 接收请求并顺序追加写入本地日志。</li>
+          <li><span class="seq-tag">② Follower 同步复制</span>：ISR 集合内的 Follower 副本实时 Fetch 并写入本地副本。</li>
+          <li><span class="seq-tag">③ 推进高水位 (HW)</span>：满足 <code>min.insync.replicas>=2</code> 多数派后，高水位推进，消息对下游可见。</li>
+          <li><span class="seq-tag">④ Leader 回传 ACK</span>：向 Debezium Producer 回复写入成功应答。</li>
+        </ul>
+      </div>
+
+      <div class="card">
+        <div class="card-header">
+          <div class="card-dot cyan"></div>
+          <h3>节点 7：消费端应用执行时序</h3>
+        </div>
+        <ul>
+          <li><span class="seq-tag">① 拉取安全消息</span>：关闭 <code>auto.commit</code>，调用 <code>poll()</code> 拉取 HW 范围内的消息。</li>
+          <li><span class="seq-tag">② 强幂等防重核验</span>：检查 Redis <code>SETNX event_id</code> / 数据库唯一主键约束 / 状态机。</li>
+          <li><span class="seq-tag">③ 执行实际下游业务</span>：扣减库存、财务记账、派发工单，确保本地业务彻底成功。</li>
+          <li><span class="seq-tag">④ 手动提交位点</span>：调用 <code>commitSync()</code> 向 Kafka 提交消费进度，形成闭环。</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- 深度剖析模块：哪些场景发生重复发送，哪些场景发生重复消费？ -->
+    <div class="analysis-section">
+      <div class="section-title-bar">
+        <div class="card-dot rose"></div>
+        <h2>异常场景深度剖析：哪些情况会发生【重复发送】与【重复消费】？</h2>
+      </div>
+
+      <div class="scenario-grid">
+        <!-- 左侧：重复发送场景 -->
+        <div class="scenario-card">
+          <div class="scenario-header">
+            <h3 style="color: #fb923c;">
+              <span class="card-dot orange"></span>
+              一、 生产端【重复发送】场景 (Producer / Relay)
+            </h3>
+            <span class="badge-trigger">At-Least-Once 产物</span>
+          </div>
+
+          <div class="scenario-item orange">
+            <span class="badge-trigger">场景 1 · 最常见</span>
+            <h4>网络抖动 / ACK 响应回传超时 (Timeout)</h4>
+            <p><strong>过程</strong>：Debezium 发送消息到 Kafka Broker，Broker 成功写入并同步到了所有 ISR 副本，然后向 Debezium 回传 ACK。</p>
+            <p><strong>异常</strong>：由于网络丢包、延迟卡顿，ACK 包超过了 <code>request.timeout.ms</code>。</p>
+            <p><strong>后果</strong>：Producer 误以为投递失败，触发内置无限重试机制（<code>retries=MAX</code>），向 Kafka 再次重发。Kafka 内部因此存在两条一模一样的消息。</p>
+          </div>
+
+          <div class="scenario-item orange">
+            <span class="badge-trigger">场景 2 · 瞬时不可用</span>
+            <h4>Kafka 分区 Leader 瞬时崩溃与重新选举</h4>
+            <p><strong>过程</strong>：原 Leader 收到消息写入并同步给了 Follower，但原 Leader 在返回 ACK 前突然宕机或发生长达数秒的 JVM Full GC 假死。</p>
+            <p><strong>异常</strong>：ACK 丢失，集群控制器感知后将 Follower 选举为新 Leader。</p>
+            <p><strong>后果</strong>：Producer 收到连接断开或网络异常报错，重新连接新 Leader 并重发该消息，造成物理重复。</p>
+          </div>
+
+          <div class="scenario-item orange">
+            <span class="badge-trigger">场景 3 · 状态丢失</span>
+            <h4>Debezium 在推进 Postgres LSN 前崩溃 / 重启</h4>
+            <p><strong>过程</strong>：Debezium 从 Postgres 读取 LSN=100 的 Outbox 记录，已成功推送给 Kafka 并拿到 ACK。</p>
+            <p><strong>异常</strong>：在 Debezium 即将向 Postgres 确认位点（更新 <code>confirmed_flush_lsn</code>）或提交到 <code>connect-offsets</code> 的前一瞬间，容器被 OOM 强杀或宿主机断电。</p>
+            <p><strong>后果</strong>：Debezium 重启后查到的最后确认位点依然是 LSN=99，它会再次从 LSN=100 重新拉取并向 Kafka 再次发送！此时即使开启了 Kafka 幂等生产者（PID 重启后变更），也会重复投递。</p>
+          </div>
+        </div>
+
+        <!-- 右侧：重复消费场景 -->
+        <div class="scenario-card">
+          <div class="scenario-header">
+            <h3 style="color: #fb7185;">
+              <span class="card-dot rose"></span>
+              二、 消费端【重复消费】场景 (Consumer Application)
+            </h3>
+            <span class="badge-trigger rose">业务防线核心</span>
+          </div>
+
+          <div class="scenario-item rose">
+            <span class="badge-trigger rose">场景 1 · 最隐蔽也最高频</span>
+            <h4>业务处理过慢导致 Heartbeat 超时，引发 Rebalance</h4>
+            <p><strong>过程</strong>：消费者 <code>poll()</code> 一次性拉取了较多消息（<code>max.poll.records</code>）。</p>
+            <p><strong>异常</strong>：下游业务逻辑处理繁重（循环远程 RPC、慢 SQL、等待外系统响应），总耗时超过了 <code>max.poll.interval.ms</code>（默认 5 分钟）。</p>
+            <p><strong>后果</strong>：Kafka Coordinator 判定此消费者“假死暴毙”，强行将其踢出消费组并触发 <strong>Rebalance</strong>。该分区被分配给另一个消费者实例，从旧 Offset 重新拉取这批消息，导致前一个实例还在处理、后一个实例又开始重跑！</p>
+          </div>
+
+          <div class="scenario-item rose">
+            <span class="badge-trigger rose">场景 2 · 提交前崩溃</span>
+            <h4>业务写入成功，但在手动提交 Offset 之前进程被杀</h4>
+            <p><strong>过程</strong>：代码遵循严谨的“先业务入库成功，后调用 <code>commitSync()</code>”。</p>
+            <p><strong>异常</strong>：本地业务事务已经 Commit（如订单已核销、款项已扣除），但在即将执行 <code>commitSync()</code> 时，服务器断电或被 K8s 执行滚动发布/缩容强杀（<code>SIGKILL</code>）。</p>
+            <p><strong>后果</strong>：Kafka 的 <code>__consumer_offsets</code> 未更新。新 Pod 启动后只能从上一个提交位点重新消费，造成重复执行。</p>
+          </div>
+
+          <div class="scenario-item rose">
+            <span class="badge-trigger rose">场景 3 · 自动提交缺陷</span>
+            <h4>开启了自动提交位点 (auto.commit)，发生未捕获异常</h4>
+            <p><strong>过程</strong>：开启 <code>enable.auto.commit = true</code>，后台定时器每 5 秒提交一次位点。</p>
+            <p><strong>异常</strong>：拉取了 10 条消息，处理到第 5 条时抛出业务异常导致应用 Crash 退出（未到 5 秒定时周期）。</p>
+            <p><strong>后果</strong>：重启后未提交位点，前 4 条已经处理成功的消息被重新拉出再次消费。</p>
+          </div>
+
+          <div class="scenario-item rose">
+            <span class="badge-trigger rose">场景 4 · 网络波动</span>
+            <h4>提交 Offset 请求时遭遇网络超时</h4>
+            <p><strong>过程</strong>：业务执行完毕，调用 <code>commitSync()</code> 提交位点。</p>
+            <p><strong>异常</strong>：网络抖动或 Broker 发生瞬时网络重置，提交请求超时抛出异常退出，位点未成功记录。</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 对比总结表格 -->
+      <div class="summary-table-container">
+        <table class="analysis-table">
+          <thead>
+            <tr>
+              <th style="width: 14%;">阶段</th>
+              <th style="width: 28%;">典型触发场景</th>
+              <th style="width: 30%;">底层本质原因</th>
+              <th style="width: 28%;">终极防御手段</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-weight: 700; color: #fb923c;">生产端<br>(Debezium / Producer)</td>
+              <td>1. ACK 网络丢包或超时<br>2. Kafka Broker 瞬时切主<br>3. 推进 Postgres LSN 前 Debezium 重启</td>
+              <td><strong>Kafka 已经落盘，但发送方没有收到 ACK 或没有记下 LSN 进度</strong>，从而触发 At-Least-Once 保底重试。</td>
+              <td>开启 Kafka <code>enable.idempotence=true</code>（防网络重试）；<strong>无法防御重启场景，必须依赖下游消费幂等</strong>。</td>
+            </tr>
+            <tr>
+              <td style="font-weight: 700; color: #fb7185;">消费端<br>(Consumer Worker)</td>
+              <td>1. 业务处理超耗时引发 Rebalance<br>2. 业务落库成功但在 Commit 前被杀/OOM<br>3. 提交 Offset 网络异常超时<br>4. 自动提交未到周期异常退出</td>
+              <td><strong>下游业务已经生效，但 Kafka 端记录的消费位点（Offset）未向前推进</strong>。</td>
+              <td><strong>强幂等防重保障网</strong>：<br>① Redis <code>SETNX event_id</code> 分布式防重锁<br>② 数据库全局唯一键 (Unique Key)<br>③ 业务状态机前置过滤校验</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="conclusion-box">
+        <strong>💡 分布式一致性黄金法则：</strong>
+        在分布式可靠系统中，“跨网络动作已执行，但确认（ACK/Offset）在路上丢失”是无法用单纯的重试消除的物理必然。因此行业终极架构共识是：<strong>“生产端尽一切努力保证至少投递一次（At-Least-Once），放弃‘恰好一次消费（Exactly-Once）’的网络幻想，消费端通过唯一主键、防重锁和状态机构筑 100% 强幂等底座。”</strong>
+      </div>
+    </div>
+
+    <p class="footer">
+      Transactional Outbox End-to-End Architecture (Sequenced Edition) • Generated by Hermes
+    </p>
+  </div>
+</body>
+</html>

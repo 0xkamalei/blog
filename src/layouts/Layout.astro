@@ -8,6 +8,8 @@ interface Props {
 	article?: boolean;
 	publishedTime?: string;
 	tags?: string[];
+	/** 宽版布局，用于知识库这类图表型页面 */
+	wide?: boolean;
 }
 
 const { 
@@ -16,11 +18,16 @@ const {
 	image = '/og-default.png',
 	article = false,
 	publishedTime,
-	tags = []
+	tags = [],
+	wide = false
 } = Astro.props;
 
 const canonicalURL = new URL(Astro.url.pathname, Astro.site || 'https://blog.leix.dev');
 const ogImage = new URL(image, Astro.site || 'https://blog.leix.dev');
+
+const pathname = Astro.url.pathname;
+const isPosts = pathname === '/' || pathname.startsWith('/posts');
+const isKnowledge = pathname.startsWith('/knowledge');
 ---
 
 <!doctype html>
@@ -56,6 +63,7 @@ const ogImage = new URL(image, Astro.site || 'https://blog.leix.dev');
 		
 		<meta name="generator" content={Astro.generator} />
 		<title>{title} | Lei's Blog</title>
+		<slot name="head" />
         <script is:inline>
             // Inline script to avoid FOUC
             const theme = (() => {
@@ -70,7 +78,7 @@ const ogImage = new URL(image, Astro.site || 'https://blog.leix.dev');
             document.documentElement.setAttribute('data-theme', theme);
         </script>
 	</head>
-	<body>
+	<body class={wide ? 'wide' : undefined}>
 		<nav>
             <div class="nav-content">
                 <a href="/" class="logo">
@@ -78,7 +86,8 @@ const ogImage = new URL(image, Astro.site || 'https://blog.leix.dev');
 					<span class="logo-text">Lei's Blog</span>
 				</a>
 				<div class="nav-right">
-					<a href="/" class="nav-link">文章</a>
+					<a href="/" class:list={['nav-link', { active: isPosts }]}>文章</a>
+					<a href="/knowledge/" class:list={['nav-link', { active: isKnowledge }]}>知识</a>
 					<a href="https://leix.dev" target="_blank" rel="noopener noreferrer" class="nav-link">关于</a>
                 	<ThemeToggle />
 				</div>
@@ -123,7 +132,12 @@ const ogImage = new URL(image, Astro.site || 'https://blog.leix.dev');
                 --shadow: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.05);
                 --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.08), 0 4px 6px -4px rgba(0,0,0,0.05);
                 --code-bg: #f8fafc;
+                --content-max: 720px;
 			}
+
+            body.wide {
+                --content-max: 1440px;
+            }
 
             [data-theme='dark'] {
                 --bg-color: #0a0a0a;
@@ -166,7 +180,7 @@ const ogImage = new URL(image, Astro.site || 'https://blog.leix.dev');
 				margin: 0 auto;
 				padding: 3rem 1.5rem;
 				width: 100%;
-				max-width: 720px;
+				max-width: var(--content-max);
 				font-size: 16px;
 				line-height: 1.7;
 				flex: 1;
@@ -187,7 +201,7 @@ const ogImage = new URL(image, Astro.site || 'https://blog.leix.dev');
 			}
 
             .nav-content {
-                max-width: 720px;
+                max-width: var(--content-max);
                 margin: 0 auto;
                 padding: 0.875rem 1.5rem;
                 display: flex;
@@ -241,6 +255,24 @@ const ogImage = new URL(image, Astro.site || 'https://blog.leix.dev');
 				background-color: var(--hover-color);
 			}
 
+			.nav-link.active {
+				color: var(--text-color);
+				background-color: var(--hover-color);
+				font-weight: 500;
+			}
+
+			@media (max-width: 480px) {
+				.nav-content {
+					padding: 0.875rem 1rem;
+					gap: 0.5rem;
+				}
+
+				.nav-link {
+					padding: 0.5rem 0.5rem;
+					font-size: 0.85rem;
+				}
+			}
+
             a {
                 color: var(--primary-color);
                 text-decoration: none;
@@ -272,7 +304,7 @@ const ogImage = new URL(image, Astro.site || 'https://blog.leix.dev');
                 border: 1px solid var(--border-color);
             }
 
-            @media (max-width: 640px) {
+			@media (max-width: 640px) {
                 article {
                     padding: 1.5rem;
                     border-radius: 12px;
@@ -283,6 +315,10 @@ const ogImage = new URL(image, Astro.site || 'https://blog.leix.dev');
 				}
             }
 
+			body.wide main {
+				padding: 2rem 1.5rem 3rem;
+			}
+
             footer {
                 margin-top: auto;
                 padding: 3rem 1.5rem;
@@ -291,7 +327,7 @@ const ogImage = new URL(image, Astro.site || 'https://blog.leix.dev');
             }
 
             .footer-content {
-                max-width: 720px;
+                max-width: var(--content-max);
                 margin: 0 auto;
 				text-align: center;
             }

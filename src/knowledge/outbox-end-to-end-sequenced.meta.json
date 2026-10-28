@@ -1,0 +1,6 @@
+{
+  "title": "Transactional Outbox 端到端全链路架构",
+  "description": "从业务写库到下游消费的完整链路拆解：每个节点的内部执行顺序、At-Least-Once 的成因，以及消费端强幂等的三道防线。",
+  "tags": ["分布式", "一致性", "Kafka", "架构图"],
+  "date": "2026-10-28"
+}
